@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Upload, Send, AlertCircle } from "lucide-react";
+import { CalendarIcon, Upload, Send, AlertCircle, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
 const formSchema = z.object({
@@ -39,6 +38,7 @@ export default function Index() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -104,6 +104,7 @@ export default function Index() {
       form.reset();
       setImageFile(null);
       setImagePreview(null);
+      setSubmitted(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Gagal mengirim laporan";
       toast.error(message);
@@ -112,50 +113,84 @@ export default function Index() {
     }
   };
 
+  if (submitted) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center p-4 bg-muted/30"
+        style={settings?.background_url ? { backgroundImage: `url(${settings.background_url})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+      >
+        <div className="w-full max-w-md text-center space-y-6 bg-card/95 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-border/50">
+          <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+            <CheckCircle2 className="h-8 w-8 text-green-600" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">Laporan Terkirim!</h2>
+            <p className="text-muted-foreground">Terima kasih, laporan Anda telah berhasil dikirim dan akan segera ditindaklanjuti.</p>
+          </div>
+          <Button onClick={() => setSubmitted(false)} className="w-full">
+            Kirim Laporan Baru
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen flex items-center justify-center p-4 md:p-8 bg-muted/30"
       style={settings?.background_url ? { backgroundImage: `url(${settings.background_url})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
     >
-      <Card className="w-full max-w-2xl shadow-xl border-0 bg-card/95 backdrop-blur-sm">
-        <CardHeader className="text-center space-y-3 pb-2">
-          {settings?.logo_url && (
-            <img src={settings.logo_url} alt="Logo" className="h-14 w-auto mx-auto object-contain" />
-          )}
-          <CardTitle className="text-2xl font-bold tracking-tight flex items-center justify-center gap-2">
-            <AlertCircle className="h-6 w-6 text-primary" />
-            {settings?.site_title || "Laporkan Masalah"}
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">Silakan isi form di bawah untuk melaporkan kendala Anda</p>
-        </CardHeader>
-        <CardContent>
+      <div className="w-full max-w-2xl bg-card/95 backdrop-blur-sm rounded-2xl shadow-xl border border-border/50 overflow-hidden">
+        {/* Header */}
+        <div className="bg-primary/5 border-b border-border/50 px-6 py-5 md:px-8 md:py-6">
+          <div className="flex items-center gap-3">
+            {settings?.logo_url ? (
+              <img src={settings.logo_url} alt="Logo" className="h-10 w-auto object-contain" />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-primary" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
+                {settings?.site_title || "Laporkan Masalah"}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Isi form di bawah untuk melaporkan kendala Anda</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="px-6 py-6 md:px-8 md:py-8">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+              {/* Row 1: Username & WA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField control={form.control} name="username" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Username *</FormLabel>
-                    <FormControl><Input placeholder="Masukkan username" {...field} /></FormControl>
+                    <FormLabel className="text-sm font-medium">Username <span className="text-destructive">*</span></FormLabel>
+                    <FormControl><Input placeholder="Masukkan username" className="h-10" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="whatsapp" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nomor WhatsApp *</FormLabel>
-                    <FormControl><Input placeholder="08xxxxxxxxxx" {...field} /></FormControl>
+                    <FormLabel className="text-sm font-medium">Nomor WhatsApp <span className="text-destructive">*</span></FormLabel>
+                    <FormControl><Input placeholder="08xxxxxxxxxx" className="h-10" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Row 2: Tanggal & Website */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField control={form.control} name="issue_date" render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Tanggal Kendala *</FormLabel>
+                    <FormLabel className="text-sm font-medium">Tanggal Kendala <span className="text-destructive">*</span></FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
-                          <Button variant="outline" className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                          <Button variant="outline" className={cn("w-full h-10 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
                             {field.value ? format(field.value, "dd/MM/yyyy") : "Pilih tanggal"}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
@@ -170,10 +205,10 @@ export default function Index() {
                 )} />
                 <FormField control={form.control} name="website_id" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nama Website *</FormLabel>
+                    <FormLabel className="text-sm font-medium">Nama Website <span className="text-destructive">*</span></FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Pilih website" /></SelectTrigger>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Pilih website" /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {websites.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
@@ -184,60 +219,90 @@ export default function Index() {
                 )} />
               </div>
 
+              {/* Kendala */}
               <FormField control={form.control} name="issue_title" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Kendala (Judul) *</FormLabel>
-                  <FormControl><Input placeholder="Judul singkat kendala" {...field} /></FormControl>
+                  <FormLabel className="text-sm font-medium">Kendala <span className="text-destructive">*</span></FormLabel>
+                  <FormControl><Input placeholder="Judul singkat kendala yang dialami" className="h-10" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
 
+              {/* Isi Kendala */}
               <FormField control={form.control} name="issue_description" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Isi Kendala *</FormLabel>
-                  <FormControl><Textarea placeholder="Jelaskan kendala Anda secara detail..." rows={4} {...field} /></FormControl>
+                  <FormLabel className="text-sm font-medium">Isi Kendala <span className="text-destructive">*</span></FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Jelaskan kendala Anda secara detail..."
+                      rows={4}
+                      className="resize-none"
+                      {...field}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
 
+              {/* Status */}
               <FormField control={form.control} name="status_id" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Status *</FormLabel>
+                  <FormLabel className="text-sm font-medium">Status <span className="text-destructive">*</span></FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger><SelectValue placeholder="Pilih status" /></SelectTrigger>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Pilih status" /></SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {statuses.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                      {statuses.map(s => (
+                        <SelectItem key={s.id} value={s.id}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color || "#6b7280" }} />
+                            {s.name}
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )} />
 
+              {/* Upload Gambar */}
               <div>
-                <label className="text-sm font-medium mb-2 block">Upload Gambar</label>
-                <div className="border-2 border-dashed border-input rounded-lg p-4 text-center hover:border-primary/50 transition-colors cursor-pointer" onClick={() => document.getElementById("image-upload")?.click()}>
+                <label className="text-sm font-medium mb-2 block">Upload Gambar <span className="text-xs text-muted-foreground font-normal">(opsional)</span></label>
+                <div
+                  className="border-2 border-dashed border-input rounded-xl p-5 text-center hover:border-primary/50 transition-colors cursor-pointer bg-muted/30"
+                  onClick={() => document.getElementById("image-upload")?.click()}
+                >
                   {imagePreview ? (
-                    <img src={imagePreview} alt="Preview" className="max-h-40 mx-auto rounded-md object-contain" />
+                    <div className="space-y-2">
+                      <img src={imagePreview} alt="Preview" className="max-h-36 mx-auto rounded-lg object-contain" />
+                      <p className="text-xs text-muted-foreground">Klik untuk mengganti gambar</p>
+                    </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <Upload className="h-8 w-8" />
-                      <span className="text-sm">Klik untuk upload gambar (max 5MB)</span>
+                    <div className="flex flex-col items-center gap-2 py-2">
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Klik untuk upload gambar</p>
+                        <p className="text-xs text-muted-foreground">PNG, JPG, JPEG (max 5MB)</p>
+                      </div>
                     </div>
                   )}
                   <input id="image-upload" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
                 </div>
               </div>
 
-              <Button type="submit" className="w-full h-11 text-base font-semibold" disabled={submitting}>
+              {/* Submit */}
+              <Button type="submit" className="w-full h-11 text-base font-semibold rounded-xl" disabled={submitting}>
                 <Send className="h-4 w-4 mr-2" />
                 {submitting ? "Mengirim..." : "Kirim Laporan"}
               </Button>
             </form>
           </Form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
