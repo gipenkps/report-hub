@@ -18,14 +18,19 @@ export default function AdminLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await signIn(email, password);
-    if (error) {
-      toast.error("Login gagal: " + error.message);
-    } else {
+
+    try {
+      const { error } = await signIn(email, password);
+      if (error) {
+        toast.error("Login gagal: " + error.message);
+        return;
+      }
+
       toast.success("Login berhasil!");
       navigate("/admin");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
