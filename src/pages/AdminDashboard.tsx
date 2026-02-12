@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Download, Eye } from "lucide-react";
+import { CalendarIcon, Download, Eye, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import AdminLayout from "@/components/AdminLayout";
@@ -10,6 +10,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 
 interface Report {
   id: string;
@@ -22,14 +25,23 @@ interface Report {
   created_at: string;
   websites: { name: string } | null;
   statuses: { name: string; color: string | null } | null;
+  status_id: string | null;
+}
+
+interface Status {
+  id: string;
+  name: string;
+  color: string | null;
 }
 
 export default function AdminDashboard() {
   const [reports, setReports] = useState<Report[]>([]);
+  const [statuses, setStatuses] = useState<Status[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [selected, setSelected] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchReports = async () => {
     setLoading(true);
@@ -43,10 +55,67 @@ export default function AdminDashboard() {
 
     const { data } = await query;
     setReports((data as unknown as Report[]) || []);
+    setSelectedIds(new Set());
     setLoading(false);
   };
 
+  useEffect(() => {
+    supabase.from("statuses").select("id, name, color").then(({ data }) => {
+      if (data) setStatuses(data);
+    });
+  }, []);
+
   useEffect(() => { fetchReports(); }, [dateFrom, dateTo]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === reports.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(reports.map(r => r.id)));
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    const { error } = await supabase.from("reports").delete().in("id", ids);
+    if (error) {
+      toast.error("Gagal menghapus: " + error.message);
+    } else {
+      toast.success(`${ids.length} laporan berhasil dihapus`);
+      fetchReports();
+    }
+  };
+
+  const deleteAll = async () => {
+    if (reports.length === 0) return;
+    const ids = reports.map(r => r.id);
+    const { error } = await supabase.from("reports").delete().in("id", ids);
+    if (error) {
+      toast.error("Gagal menghapus: " + error.message);
+    } else {
+      toast.success("Semua laporan berhasil dihapus");
+      fetchReports();
+    }
+  };
+
+  const updateStatus = async (reportId: string, statusId: string) => {
+    const { error } = await supabase.from("reports").update({ status_id: statusId }).eq("id", reportId);
+    if (error) {
+      toast.error("Gagal update status: " + error.message);
+    } else {
+      toast.success("Status berhasil diubah");
+      fetchReports();
+    }
+  };
 
   const exportCSV = () => {
     const headers = ["ID", "Username", "WhatsApp", "Tanggal Kendala", "Kendala", "Website", "Isi Kendala", "Status", "Dibuat"];
@@ -78,10 +147,30 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Bulk actions */}
+        {(selectedIds.size > 0 || reports.length > 0) && (
+          <div className="flex items-center gap-3 flex-wrap">
+            {selectedIds.size > 0 && (
+              <Button variant="destructive" size="sm" onClick={deleteSelected}>
+                <Trash2 className="h-4 w-4 mr-1" /> Hapus Terpilih ({selectedIds.size})
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={deleteAll} disabled={reports.length === 0} className="text-destructive border-destructive/30 hover:bg-destructive/10">
+              <Trash2 className="h-4 w-4 mr-1" /> Hapus Semua
+            </Button>
+          </div>
+        )}
+
         <div className="rounded-lg border bg-card overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={reports.length > 0 && selectedIds.size === reports.length}
+                    onCheckedChange={toggleAll}
+                  />
+                </TableHead>
                 <TableHead>ID</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Tanggal</TableHead>
@@ -93,23 +182,45 @@ export default function AdminDashboard() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Memuat data...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Memuat data...</TableCell></TableRow>
               ) : reports.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Belum ada laporan</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Belum ada laporan</TableCell></TableRow>
               ) : (
                 reports.map(r => (
-                  <TableRow key={r.id}>
+                  <TableRow key={r.id} className={cn(selectedIds.has(r.id) && "bg-muted/50")}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(r.id)}
+                        onCheckedChange={() => toggleSelect(r.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{r.id}</TableCell>
                     <TableCell>{r.username}</TableCell>
                     <TableCell>{r.issue_date}</TableCell>
                     <TableCell className="max-w-[200px] truncate">{r.issue_title}</TableCell>
                     <TableCell>{r.websites?.name || "-"}</TableCell>
                     <TableCell>
-                      {r.statuses ? (
-                        <Badge style={{ backgroundColor: r.statuses.color || undefined }} className="text-white">
-                          {r.statuses.name}
-                        </Badge>
-                      ) : "-"}
+                      <Select value={r.status_id || ""} onValueChange={(val) => updateStatus(r.id, val)}>
+                        <SelectTrigger className="h-8 w-[130px]">
+                          <SelectValue>
+                            {r.statuses ? (
+                              <Badge style={{ backgroundColor: r.statuses.color || undefined }} className="text-white text-xs">
+                                {r.statuses.name}
+                              </Badge>
+                            ) : "Pilih"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statuses.map(s => (
+                            <SelectItem key={s.id} value={s.id}>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color || "#6b7280" }} />
+                                {s.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" onClick={() => setSelected(r)}>
