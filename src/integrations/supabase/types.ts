@@ -71,6 +71,8 @@ export type Database = {
       site_settings: {
         Row: {
           background_url: string | null
+          border_color: string | null
+          button_color: string | null
           favicon_url: string | null
           id: string
           logo_url: string | null
@@ -79,6 +81,8 @@ export type Database = {
         }
         Insert: {
           background_url?: string | null
+          border_color?: string | null
+          button_color?: string | null
           favicon_url?: string | null
           id?: string
           logo_url?: string | null
@@ -87,6 +91,8 @@ export type Database = {
         }
         Update: {
           background_url?: string | null
+          border_color?: string | null
+          button_color?: string | null
           favicon_url?: string | null
           id?: string
           logo_url?: string | null

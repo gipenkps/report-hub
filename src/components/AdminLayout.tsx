@@ -2,14 +2,15 @@ import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Globe, Tag, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Globe, Tag, Settings, LogOut, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/admin/websites", icon: Globe, label: "Kelola Website" },
   { to: "/admin/statuses", icon: Tag, label: "Kelola Status" },
-  { to: "/admin/settings", icon: Settings, label: "Pengaturan SEO" },
+  { to: "/admin/settings", icon: Settings, label: "Pengaturan" },
+  { to: "/admin/account", icon: Users, label: "Kelola Akun" },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
