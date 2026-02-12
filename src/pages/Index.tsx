@@ -22,7 +22,6 @@ const formSchema = z.object({
   issue_title: z.string().trim().min(1, "Judul kendala wajib diisi").max(200),
   website_id: z.string().min(1, "Nama website wajib dipilih"),
   issue_description: z.string().trim().min(1, "Isi kendala wajib diisi").max(2000),
-  status_id: z.string().min(1, "Status wajib dipilih"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -33,7 +32,6 @@ interface SiteSettings { site_title: string | null; logo_url: string | null; bac
 
 export default function Index() {
   const [websites, setWebsites] = useState<Website[]>([]);
-  const [statuses, setStatuses] = useState<Status[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -47,13 +45,11 @@ export default function Index() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const [w, s, st] = await Promise.all([
+      const [w, st] = await Promise.all([
         supabase.from("websites").select("id, name"),
-        supabase.from("statuses").select("id, name, color"),
         supabase.from("site_settings").select("site_title, logo_url, background_url").maybeSingle(),
       ]);
       if (w.data) setWebsites(w.data);
-      if (s.data) setStatuses(s.data);
       if (st.data) setSettings(st.data);
     };
     fetchData();
@@ -88,6 +84,13 @@ export default function Index() {
         image_url = urlData.publicUrl;
       }
 
+      // Auto-assign "Diproses" status
+      const { data: diprosesStatus } = await supabase
+        .from("statuses")
+        .select("id")
+        .eq("name", "Diproses")
+        .maybeSingle();
+
       const { error } = await supabase.from("reports").insert({
         username: values.username,
         whatsapp: values.whatsapp,
@@ -95,7 +98,7 @@ export default function Index() {
         issue_title: values.issue_title,
         website_id: values.website_id,
         issue_description: values.issue_description,
-        status_id: values.status_id,
+        status_id: diprosesStatus?.id || null,
         image_url,
       });
 
@@ -240,29 +243,6 @@ export default function Index() {
                       {...field}
                     />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              {/* Status */}
-              <FormField control={form.control} name="status_id" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium">Status <span className="text-destructive">*</span></FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-10"><SelectValue placeholder="Pilih status" /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {statuses.map(s => (
-                        <SelectItem key={s.id} value={s.id}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color || "#6b7280" }} />
-                            {s.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   <FormMessage />
                 </FormItem>
               )} />
