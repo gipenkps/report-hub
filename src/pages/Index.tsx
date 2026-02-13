@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Upload, Send, User, Phone, AlertTriangle, Globe, MessageSquare } from "lucide-react";
+import { CalendarIcon, Upload, Send, User, Phone, AlertTriangle, Globe, MessageSquare, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,8 +39,8 @@ interface SiteSettings {
 export default function Index() {
   const [websites, setWebsites] = useState<Website[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -66,29 +66,45 @@ export default function Index() {
   }, [settings]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { toast.error("Ukuran file maksimal 5MB"); return; }
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+    const files = Array.from(e.target.files || []);
+    const valid = files.filter(f => {
+      if (f.size > 5 * 1024 * 1024) { toast.error(`${f.name} melebihi 5MB`); return false; }
+      return true;
+    });
+    if (imageFiles.length + valid.length > 5) {
+      toast.error("Maksimal 5 gambar");
+      return;
     }
+    setImageFiles(prev => [...prev, ...valid]);
+    setImagePreviews(prev => [...prev, ...valid.map(f => URL.createObjectURL(f))]);
+    e.target.value = "";
+  };
+
+  const removeImage = (index: number) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
     try {
-      let image_url: string | null = null;
-      if (imageFile) {
-        const ext = imageFile.name.split(".").pop();
+      const uploadedUrls: string[] = [];
+      for (const file of imageFiles) {
+        const ext = file.name.split(".").pop();
         const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from("reports").upload(path, imageFile);
+        const { error: uploadError } = await supabase.storage.from("reports").upload(path, file);
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from("reports").getPublicUrl(path);
-        image_url = urlData.publicUrl;
+        uploadedUrls.push(urlData.publicUrl);
       }
 
       const { data: diprosesStatus } = await supabase
         .from("statuses").select("id").eq("name", "Diproses").maybeSingle();
+
+      const image_url = uploadedUrls.length > 0 ? JSON.stringify(uploadedUrls) : null;
 
       const { error } = await supabase.from("reports").insert({
         username: values.username,
@@ -104,8 +120,8 @@ export default function Index() {
       if (error) throw error;
       toast.success("Laporan berhasil dikirim!");
       form.reset();
-      setImageFile(null);
-      setImagePreview(null);
+      setImageFiles([]);
+      setImagePreviews([]);
       setSubmitted(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Gagal mengirim laporan";
@@ -129,13 +145,11 @@ export default function Index() {
       className="min-h-screen flex flex-col items-center justify-start p-4 md:p-8"
       style={settings?.background_url ? { backgroundImage: `url(${settings.background_url})`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundColor: "#f3f4f6" }}
     >
-      {/* Logo */}
       {settings?.logo_url && (
         <img src={settings.logo_url} alt="Logo" className="h-16 md:h-20 w-auto object-contain mb-4 mt-4 drop-shadow-lg" />
       )}
 
       <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden" style={{ borderColor: brdColor, borderWidth: 2 }}>
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b" style={{ borderColor: brdColor }}>
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-muted-foreground" />
@@ -143,11 +157,9 @@ export default function Index() {
           </div>
         </div>
 
-        {/* Form */}
         <div className="px-5 py-5">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-              {/* Row 1: Username & WA */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField control={form.control} name="username" render={({ field }) => (
                   <FormItem>
@@ -173,7 +185,6 @@ export default function Index() {
                 )} />
               </div>
 
-              {/* Tanggal Kendala */}
               <FormField control={form.control} name="issue_date" render={({ field }) => (
                 <FormItem>
                   <div className="flex rounded-md overflow-hidden" style={{ border: `1px solid ${brdColor}` }}>
@@ -195,7 +206,6 @@ export default function Index() {
                 </FormItem>
               )} />
 
-              {/* Kendala */}
               <FormField control={form.control} name="issue_title" render={({ field }) => (
                 <FormItem>
                   <FormControl>
@@ -208,7 +218,6 @@ export default function Index() {
                 </FormItem>
               )} />
 
-              {/* Pilih Situs */}
               <FormField control={form.control} name="website_id" render={({ field }) => (
                 <FormItem>
                   <div className="flex rounded-md overflow-hidden" style={{ border: `1px solid ${brdColor}` }}>
@@ -228,7 +237,6 @@ export default function Index() {
                 </FormItem>
               )} />
 
-              {/* Isi Kendala */}
               <FormField control={form.control} name="issue_description" render={({ field }) => (
                 <FormItem>
                   <FormControl>
@@ -243,25 +251,36 @@ export default function Index() {
                 </FormItem>
               )} />
 
-              {/* Upload Gambar */}
-              <div className="flex rounded-md overflow-hidden" style={{ border: `1px solid ${brdColor}` }}>
-                <Button type="button" variant="ghost" className="rounded-none h-10 text-sm font-normal px-4 border-r" style={{ borderColor: brdColor }}
-                  onClick={() => document.getElementById("image-upload")?.click()}>
-                  Choose File
-                </Button>
-                <div className="flex-1 flex items-center px-3 text-sm text-muted-foreground truncate">
-                  {imageFile ? imageFile.name : "No file chosen"}
+              {/* Multi Upload Gambar (Opsional) */}
+              <div>
+                <div className="flex rounded-md overflow-hidden" style={{ border: `1px solid ${brdColor}` }}>
+                  <Button type="button" variant="ghost" className="rounded-none h-10 text-sm font-normal px-4 border-r" style={{ borderColor: brdColor }}
+                    onClick={() => document.getElementById("image-upload")?.click()}>
+                    Pilih Gambar
+                  </Button>
+                  <div className="flex-1 flex items-center px-3 text-sm text-muted-foreground truncate">
+                    {imageFiles.length > 0 ? `${imageFiles.length} file dipilih` : "Opsional, maks 5 gambar"}
+                  </div>
+                  <div className="flex items-center justify-center w-10 bg-muted/60 border-l" style={{ borderColor: brdColor }}>
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <input id="image-upload" type="file" accept="image/*" multiple className="hidden" onChange={handleImageChange} />
                 </div>
-                <div className="flex items-center justify-center w-10 bg-muted/60 border-l" style={{ borderColor: brdColor }}>
-                  <Upload className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <input id="image-upload" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                {imagePreviews.length > 0 && (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {imagePreviews.map((src, i) => (
+                      <div key={i} className="relative group">
+                        <img src={src} alt={`Preview ${i + 1}`} className="h-20 w-20 rounded-md object-cover border" />
+                        <button type="button" onClick={() => removeImage(i)}
+                          className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {imagePreview && (
-                <img src={imagePreview} alt="Preview" className="max-h-28 rounded-md object-contain" />
-              )}
 
-              {/* Submit */}
               <Button
                 type="submit"
                 className="w-full h-11 text-base font-bold rounded-lg"
