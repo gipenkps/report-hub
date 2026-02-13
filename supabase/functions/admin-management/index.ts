@@ -13,7 +13,6 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify caller is admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
 
@@ -30,11 +29,12 @@ Deno.serve(async (req) => {
     const { action, ...params } = await req.json();
 
     if (action === "change_password") {
-      const { new_password } = params;
+      const { new_password, user_id } = params;
+      const targetId = user_id || user.id;
       if (!new_password || new_password.length < 6) {
         return new Response(JSON.stringify({ error: "Password minimal 6 karakter" }), { status: 400, headers: corsHeaders });
       }
-      const { error } = await adminClient.auth.admin.updateUserById(user.id, { password: new_password });
+      const { error } = await adminClient.auth.admin.updateUserById(targetId, { password: new_password });
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders });
       return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
     }
@@ -53,6 +53,39 @@ Deno.serve(async (req) => {
       if (roleError) return new Response(JSON.stringify({ error: roleError.message }), { status: 400, headers: corsHeaders });
 
       return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), { headers: corsHeaders });
+    }
+
+    if (action === "list_admins") {
+      const { data: roles, error: rolesError } = await adminClient
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin");
+      if (rolesError) return new Response(JSON.stringify({ error: rolesError.message }), { status: 400, headers: corsHeaders });
+
+      const admins = [];
+      for (const role of roles || []) {
+        const { data: { user: adminUser } } = await adminClient.auth.admin.getUserById(role.user_id);
+        if (adminUser) {
+          admins.push({
+            id: adminUser.id,
+            email: adminUser.email,
+            created_at: adminUser.created_at,
+            last_sign_in_at: adminUser.last_sign_in_at,
+          });
+        }
+      }
+      return new Response(JSON.stringify({ admins }), { headers: corsHeaders });
+    }
+
+    if (action === "delete_admin") {
+      const { user_id: targetId } = params;
+      if (!targetId) return new Response(JSON.stringify({ error: "user_id wajib diisi" }), { status: 400, headers: corsHeaders });
+      if (targetId === user.id) return new Response(JSON.stringify({ error: "Tidak bisa menghapus akun sendiri" }), { status: 400, headers: corsHeaders });
+
+      await adminClient.from("user_roles").delete().eq("user_id", targetId).eq("role", "admin");
+      const { error } = await adminClient.auth.admin.deleteUser(targetId);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: corsHeaders });
