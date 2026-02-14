@@ -19,59 +19,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const checkAdmin = async (userId: string) => {
+  const checkAdminRole = async (userId: string) => {
     try {
-      const { data, error } = await supabase.rpc("has_role", {
-        _user_id: userId,
-        _role: "admin",
-      });
-      if (error) {
-        setIsAdmin(false);
-        return;
-      }
-      setIsAdmin(Boolean(data));
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+      return !!data;
     } catch {
-      setIsAdmin(false);
+      return false;
     }
   };
 
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
 
-    const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!mounted) return;
-      
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        await checkAdmin(session.user.id);
-      } else {
-        setIsAdmin(false);
+    // Listener for ONGOING auth changes (does NOT control loading)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!isMounted) return;
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          setTimeout(async () => {
+            const admin = await checkAdminRole(session.user.id);
+            if (isMounted) setIsAdmin(admin);
+          }, 0);
+        } else {
+          setIsAdmin(false);
+        }
       }
-      
-      if (mounted) setLoading(false);
+    );
+
+    // INITIAL load (controls loading state)
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!isMounted) return;
+
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        // Fetch role BEFORE setting loading false
+        if (session?.user) {
+          const admin = await checkAdminRole(session.user.id);
+          if (isMounted) setIsAdmin(admin);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     };
 
-    initSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        await checkAdmin(session.user.id);
-      } else {
-        setIsAdmin(false);
-      }
-    });
+    initializeAuth();
 
     return () => {
-      mounted = false;
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
