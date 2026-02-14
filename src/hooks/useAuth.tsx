@@ -26,7 +26,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         _role: "admin",
       });
       if (error) {
-        // If role check fails, default to non-admin but don't block auth.
         setIsAdmin(false);
         return;
       }
@@ -37,34 +36,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let mounted = true;
+
+    const initSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted) return;
+      
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        await checkAdmin(session.user.id);
+      } else {
+        setIsAdmin(false);
+      }
+      
+      if (mounted) setLoading(false);
+    };
+
+    initSession();
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
-      setLoading(false);
 
       if (session?.user) {
-        // Fire-and-forget so auth flow never gets stuck on role lookup.
-        void checkAdmin(session.user.id);
+        await checkAdmin(session.user.id);
       } else {
         setIsAdmin(false);
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-
-      if (session?.user) {
-        void checkAdmin(session.user.id);
-      } else {
-        setIsAdmin(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
